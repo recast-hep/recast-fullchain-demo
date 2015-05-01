@@ -1,0 +1,8 @@
+import {PROC}
+output {WORKDIR}
+set automatic_html_opening False
+launch -n output
+{PARAM}
+set nevents {NEVENTS}
+done
+quit
