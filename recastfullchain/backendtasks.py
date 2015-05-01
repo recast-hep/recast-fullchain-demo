@@ -10,12 +10,8 @@ def recast(ctx):
 
   workdir = 'workdirs/{}'.format(jobguid)
 
-  proc = subprocess.Popen(['recastworkflow-fullchain',workdir,'--logger','RECAST'], stdout = subprocess.PIPE)
+  proc = subprocess.check_call(['recastworkflow-fullchain',workdir,'--logger','RECAST'], stdout = subprocess.PIPE)
 
-  for line in proc.stdout:
-    if 'RECAST' in line:
-      log.info(line)
-  
   log.info('finished. thanks.')
   return jobguid
 
