@@ -15,13 +15,33 @@ $(document).ready(function(){
     <h1>Results for request <small>{{requestId}} - {{parameter_pt}}</small></h1>
 </div>
 <div class="row">
-<a href=/resultfile/{{requestId}}/{{parameter_pt}}/dedicated/plot.pdf>plot</a>
+    <h3>Feynman Diagrams of Hard Process</h3>
+
+{% for feyn in feynmandiags %}
+<a href=/resultfile/{{requestId}}/{{parameter_pt}}/dedicated/{{feyn}}.pdf>
+    <img style="border:1px black solid" height=700 src=/resultfile/{{requestId}}/{{parameter_pt}}/dedicated/{{feyn}}.png></img>
+</a>
+{% endfor %}
 </div>
 
 <div class="row">
-<object width="400" height="400" data="/resultfile/{{requestId}}/{{parameter_pt}}/dedicated/what.svg" type="image/svg+xml">
-  <img src="yourfallback.jpg" />
-</object>
+    <h3>Structure after Heavy Particle Decay (before shower)</h3>
+<a href=/resultfile/{{requestId}}/{{parameter_pt}}/dedicated/what.pdf>
+    <img height=400 src=/resultfile/{{requestId}}/{{parameter_pt}}/dedicated/what.png></img>
+</a>
+
+
+</div>
+<div class="row">
+    <h3>Reconstructed Events</h3>
+<a href=/resultfile/{{requestId}}/{{parameter_pt}}/dedicated/eventdisplay.png>
+    <img height=400 src=/resultfile/{{requestId}}/{{parameter_pt}}/dedicated/eventdisplay.png></img>
+</a>
+<a href=/resultfile/{{requestId}}/{{parameter_pt}}/dedicated/plot.pdf>
+    <img height=400 src=/resultfile/{{requestId}}/{{parameter_pt}}/dedicated/plot.png></img>
+</a>
+</div>
+
 
 
 </div>

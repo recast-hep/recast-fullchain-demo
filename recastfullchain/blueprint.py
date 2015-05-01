@@ -9,7 +9,10 @@ import requests
 import os
 from zipfile import ZipFile
 import glob
+from recastbackend.resultaccess import resultfilepath
 
 @blueprint.route('/result/<requestId>/<parameter_pt>')
 def result_view(requestId,parameter_pt):
-  return render_template('result.html',analysisId = RECAST_ANALYSIS_ID,requestId=requestId,parameter_pt=parameter_pt)
+  resultdir  = resultfilepath(requestId,parameter_pt,'dedicated','')
+  feynmandiags = [x.rstrip('.pdf').replace(resultdir+'/','') for x in glob.glob('{}/feynmandiags/*.pdf'.format(resultdir))]
+  return render_template('result.html',analysisId = RECAST_ANALYSIS_ID,requestId=requestId,parameter_pt=parameter_pt, feynmandiags = feynmandiags)
