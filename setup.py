@@ -15,6 +15,12 @@ setup(
   install_requires = [
       'Flask',
       'click',
-      'adage'
-    ]
+      'adage',
+      'mcviz',
+      'reportlab',
+      'svg2rlg'
+    ],
+  dependency_links = [
+    'https://github.com/lukasheinrich/mcviz/tarball/master#egg=mcviz-0.1'
+  ]
 )

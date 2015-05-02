@@ -6,7 +6,7 @@ import os
 import subprocess
 import os
 import shutil
-
+import glob
 from adage import adagetask
 from contextlib import contextmanager
 
@@ -26,7 +26,7 @@ def subprocess_in_env(envscript = None,workdir = None):
 
   def check_call(what):
     try:
-      subprocess.check_call('{0} {1}'.format(setupenv,what),cwd = workdir, shell = True)
+      subprocess.check_call('{0} {1}'.format(setupenv,what),cwd = workdir, shell = True, stdout = open(os.devnull,'w'))
     except subprocess.CalledProcessError:
       log.error('subprocess failed: called with {0} {1}'.format(setupenv,what))
       raise RuntimeError
@@ -39,26 +39,41 @@ def render(template,outputfile,**kwargs):
       out.write(open(template).read().format(**kwargs))
 
 @adagetask
-def madgraph(steeringtempl, outputLHE, param, proc, nevents = 1000, workdir = None):
+def madgraph(steeringtempl, outputLHE, outputdiagramdir, param, proc, nevents = 1000, workdir = None):
   if not workdir:
     workdir = os.getcwd()
     
   if not os.path.exists(workdir):
     os.makedirs(workdir)
 
-
   madgraphwork = '{}/madgraphrun'.format(workdir)
   steeringfile = '{}/mg5.cmd'.format(workdir)
   render(steeringtempl,steeringfile, PARAM = param, PROC = proc, NEVENTS = nevents, WORKDIR =  madgraphwork)
-  subprocess.check_call(['mg5','-f',steeringfile])
   try:
+    subprocess.check_call(['mg5','-f',steeringfile])
     subprocess.check_call(['gunzip','-c','{}/Events/output/events.lhe.gz'.format(madgraphwork)],
                           stdout = open(outputLHE,'w'))
-  except CalledProcessError:
+    log.info('..')
+  except subprocess.CalledProcessError:
     os.remote(outputLHE)
-    
+
+  psfiles = glob.glob('{}/SubProcesses/*/matrix*.ps'.format(madgraphwork))
+
+  print psfiles
+  
+  if not os.path.exists(outputdiagramdir):
+      os.makedirs(outputdiagramdir)
+
+  for file in psfiles:
+      basename = file.replace(madgraphwork+'/','').replace('/','_').rstrip('.ps')
+      pdffile = '{}/{}'.format(outputdiagramdir,basename+'.pdf')
+      pngfile = '{}/{}'.format(outputdiagramdir,basename+'.png')
+
+      subprocess.call(['ps2pdf',file,pdffile])
+      subprocess.check_call(['convert','-trim','-density','92',pdffile,pngfile])
+       
 @adagetask
-def pythia(lhefilename,outhepmcfile,resourcedir = None, workdir = None):
+def pythia(lhefilename,outhepmcfile,resourcedir = None, workdir = None, showered = True):
   if not workdir:
     workdir = os.getcwd()
     
@@ -74,20 +89,33 @@ def pythia(lhefilename,outhepmcfile,resourcedir = None, workdir = None):
   absinputfname = os.path.abspath(lhefilename)
   basestub = os.path.basename(lhefilename).rsplit('.',1)[0]
 
-  steeringtempl = '{}/pythiasteering.tplt'.format(resourcedir)
+  template_name = 'pythiasteering.tplt' if showered else 'pythiasteering_unshowered.tplt'
+  steeringtempl = '{}/{}'.format(resourcedir,template_name)
   steeringfname = '{}/{}.steering'.format(workdir,basestub)
-  
+
   render(steeringtempl,steeringfname, INPUTLHEF = absinputfname)
   
   try:
-    pythia_proc = subprocess.check_call(['{}/pythia/pythiarun'.format(resourcedir),steeringfname,outhepmcfile])
-  except CalledProcessError:
+    env = os.environ
+    #pick up local pythia installation
+    xmldoc = subprocess.Popen(['pythia8-config','--xmldoc'],stdout = subprocess.PIPE).communicate()[0].strip()
+    env['PYTHIA8DATA'] = xmldoc
+    log.info('starting pythia')
+    with open('{}/pythia.log'.format(workdir),'w') as logfile:
+      log.info('now')
+      pythia_proc = subprocess.check_call(['{}/pythia/pythiarun'.format(resourcedir),steeringfname,outhepmcfile], env = env, stdout = logfile)
+  except subprocess.CalledProcessError:
+    log.info('something went wrong in pythia')
     os.remove(outhepmcfile)
     
 @adagetask
-def mcviz(inputhepmc,outputsvg):
+def mcviz(inputhepmc,outputsvg,outputpdf,outputpng):
   try:
     subprocess.check_call(['mcviz','--demo',inputhepmc,'--output_file',outputsvg])
+    import svg2rlg
+    import reportlab.graphics
+    d = svg2rlg.svg2rlg(outputsvg);reportlab.graphics.renderPDF.drawToFile(d,outputpdf)
+    subprocess.check_call(['convert','-trim','-density','3000',outputpdf,outputpng])
   except subprocess.CalledProcessError:
     log.error('mcviz failed!')
     raise RuntimeError
@@ -130,12 +158,14 @@ def pack_LHE_File(lhefile,counter,nameformat = None, outputdir = None):
 
   return tarballname
 
+import pkg_resources
+def rsrc(path):
+  return pkg_resources.resource_filename('recastfullchain','resources/{}'.format(path))
+
 @adagetask
 def evgen(inputtarball,outputpoolfile,jobopts,runnr,seed,firstevt = 0, ecm = 14000, maxevents = 2, workdir = None):
-  open(outputpoolfile,'a').close()
-  return
-  with subprocess_in_env(envscript = 'evgenenv.sh', workdir = workdir) as check_call:
-    check_call('Generate_tf.py --randomSeed {seed} --runNumber {runnr} --ecmEnergy {ecm} --maxEvents {maxevents} --jobConfig {jobopts} --firstEvent {firstevt} --inputGeneratorFile {inputtarball} --outputEVNTFile {outputpoolfile}'.format(
+  with subprocess_in_env(envscript = rsrc('evgenenv.sh'), workdir = workdir) as check_call:
+    check_call('Generate_trf.py randomSeed={seed} runNumber={runnr} ecmEnergy={ecm} maxEvents={maxevents} jobConfig={jobopts} firstEvent={firstevt} inputGeneratorFile={inputtarball} outputEVNTFile={outputpoolfile}'.format(
     seed = seed,
     runnr = runnr,
     ecm = ecm,
@@ -144,14 +174,11 @@ def evgen(inputtarball,outputpoolfile,jobopts,runnr,seed,firstevt = 0, ecm = 140
     firstevt = firstevt,
     inputtarball = os.path.abspath(inputtarball),
     outputpoolfile = os.path.abspath(outputpoolfile)
-  ))
+    ))
   
 @adagetask
 def sim(evgenfile, outputhitsfile, seed, maxevents = -1, workdir = None):
-  open(outputhitsfile,'a').close()
-  return 
-  
-  with subprocess_in_env(envscript = 'basicathenv.sh', workdir = workdir) as check_call:
+  with subprocess_in_env(envscript = rsrc('asetup_tag.sh')+' s1581', workdir = workdir) as check_call:
     check_call('AtlasG4_trf.py inputEvgenFile={evgenfile} outputHitsFile={outputhitsfile} maxEvents={maxevents} skipEvents=0 randomSeed={seed} geometryVersion={geometry} conditionsTag={conditions}'.format(
     seed = seed,
     evgenfile = os.path.abspath(evgenfile),
@@ -164,27 +191,70 @@ def sim(evgenfile, outputhitsfile, seed, maxevents = -1, workdir = None):
 
 @adagetask
 def digi(hitsfile, outputrdofile, maxevents = -1, workdir = None):
-  open(outputrdofile,'a').close()
-  return 
-
-  with subprocess_in_env(envscript = 'basicathenv.sh', workdir = workdir) as check_call:
+  with subprocess_in_env(envscript =  rsrc('asetup_tag.sh')+' r3658', workdir = workdir) as check_call:
     check_call('Digi_trf.py inputHitsFile={hitsfile} outputRDOFile={outputrdofile} maxEvents={maxevents} skipEvents=0 geometryVersion={geometry}  conditionsTag={conditions}'.format(
     hitsfile = os.path.abspath(hitsfile),
     outputrdofile = os.path.abspath(outputrdofile),
     geometry = 'ATLAS-GEO-16-00-00',
     conditions = 'OFLCOND-SDR-BS7T-04-00',
     maxevents = maxevents
-  ))
+    ))
 
 @adagetask
-def reco(rdofile, outputaodfile, maxevents = -1, workdir = None):
-  open(outputaodfile,'a').close()
-  return 
-  
-  with subprocess_in_env(envscript = 'basicathenv.sh', workdir = workdir) as check_call:
-    check_call('Reco_trf.py inputRDOFile={rdofile} outputAODFile={outputaodfile} maxEvents={maxevents}'.format(
+def reco(rdofile, outputesdfile, outputaodfile, maxevents = -1, workdir = None):
+  with subprocess_in_env(envscript =  rsrc('asetup_tag.sh')+' r3658', workdir = workdir) as check_call:
+    check_call('Reco_trf.py inputRDOFile={rdofile} outputESDFile={outputesdfile} outputAODFile={outputaodfile} maxEvents={maxevents}'.format(
     rdofile = os.path.abspath(rdofile),
+    outputesdfile = os.path.abspath(outputesdfile),
     outputaodfile = os.path.abspath(outputaodfile),
     maxevents = maxevents
   ))
   
+@adagetask
+def ntup(aodfile, outputntupfile, maxevents = -1, workdir = None):
+  with subprocess_in_env(envscript =  rsrc('asetup_tag.sh')+' p1512', workdir = workdir) as check_call:
+    check_call('Reco_trf.py inputAODFile={aodfile} outputNTUP_SUSYFile={outputntupfile} maxEvents={maxevents}'.format(
+    aodfile = os.path.abspath(aodfile),
+    outputntupfile = os.path.abspath(outputntupfile),
+    maxevents = maxevents
+  ))
+
+@adagetask
+def eventdisplay(aodfile,outputpngfile,workdir = None):
+  with subprocess_in_env(envscript =  rsrc('asetup_tag.sh')+' r3658', workdir = workdir) as check_call:
+    jobopttempl = rsrc('atlantisJO.tplt')
+    joboptionsfile = '{}/atlantisJO.py'.format(workdir)
+   
+    render(jobopttempl,joboptionsfile, AODFILE = os.path.abspath(aodfile))
+    check_call('athena.py {jobopts}'.format(jobopts = os.path.abspath(joboptionsfile)))
+
+    import glob
+    jivexmlfile = glob.glob('{}/JiveXML*.xml'.format(workdir))
+    assert len(jivexmlfile) == 1
+    jivexmlfile = jivexmlfile[0]
+    log.info('running atlantis on {}'.format(jivexmlfile))
+  with subprocess_in_env(workdir = '{}/runatlantis'.format(workdir) ) as check_call:
+    shutil.copyfile(jivexmlfile,'{}/runatlantis/Jive.xml'.format(workdir))
+    
+    atlantiscmd = 'java -Djava.awt.headless=true -Xms128m -Xmx1024m -jar $ATLANTISHOME/atlantis.jar'
+    check_call('{cmd} -o ./  700x700 1 eventdisplay.png -p 1 -s {source}'.format(
+      cmd = atlantiscmd,
+      source = os.path.abspath('{}/runatlantis/Jive.xml'.format(workdir))
+    ))
+    shutil.copyfile('{}/runatlantis/eventdisplay.png'.format(workdir),os.path.abspath(outputpngfile))
+
+@adagetask
+def plot(ntupfile,workdir):
+  if not workdir:
+    workdir = os.getcwd()
+
+  if not os.path.exists(workdir):
+    os.makedirs(workdir)
+
+  import ROOT
+  f = ROOT.TFile.Open(ntupfile)
+  c = ROOT.TCanvas()
+  f.susy.Draw('el_pt')
+  c.SaveAs('{0}/plot.pdf'.format(workdir))
+  c.SaveAs('{0}/plot.png'.format(workdir))
+

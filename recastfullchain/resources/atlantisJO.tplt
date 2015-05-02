@@ -1,0 +1,56 @@
+#
+# jOs for RTT testing: Cosmics/1beam AODs, run from Jan10
+# Castor access for official ESDs and AODs is closed, use
+# wget from Bham instead. Admittingly this is messy, should be
+# put into private Castor area, or some other place on CERN-AFS.
+#   jpt 11Nov09
+#
+import os
+#### remove db link (RecExCommon_links is executed
+#### ahead of all RTT jOs):
+os.system('rm -rf sqlite200')
+#### link is updated (no need to update jOs):
+os.system('wget http://epweb2.ph.bham.ac.uk/user/thomas/atlantis/AOD_data10_RTT.pool.root')
+
+from RecExConfig.RecFlags  import rec
+from AthenaCommon.BeamFlags import jobproperties
+from AthenaCommon.AthenaCommonFlags import athenaCommonFlags
+from AthenaCommon.GlobalFlags import globalflags
+
+## 'FilesInput' triggers full autoconfiguration, which
+## replaces GEO and CONDDB setting by hand
+## Details see in Twiki: RecExCommonAutoConfiguration
+athenaCommonFlags.FilesInput.set_Value_and_Lock(['{AODFILE}'])
+
+athenaCommonFlags.EvtMax.set_Value_and_Lock(25)
+
+rec.doJiveXML.set_Value_and_Lock(True)
+rec.doCBNT.set_Value_and_Lock(False)
+rec.doAOD.set_Value_and_Lock(False)
+rec.doWriteTAG.set_Value_and_Lock(False)
+rec.doMonitoring.set_Value_and_Lock(False)
+
+# to turn off perfmon - avoids writing out big ntuples
+
+from RecExConfig.RecFlags import rec
+rec.doPerfMon=False
+
+# main jobOption - must always be included
+include ("RecExCommon/RecExCommon_topOptions.py")
+
+theAODJetRetriever.FavouriteJetCollection="AntiKt4TopoEMJets"
+### 'EM' are up-to-date jets (May 2011), for backwards compatibility:
+theAODJetRetriever.OtherJetCollections=["AntiKt6TopoEMJets","AntiKt4TopoJets","AntiKt6TopoJets"]
+
+theJetRecJetRetriever.FavouriteJetCollection="AntiKt4TopoEMJets"
+### 'EM' are up-to-date jets (May 2011), for backwards compatibility:
+theJetRecJetRetriever.OtherJetCollections=["AntiKt6TopoEMJets","AntiKt4TopoJets","AntiKt6TopoJets"]
+
+theBJetRetriever.FavouriteJetCollection="AntiKt4TopoEMJets"
+### 'EM' are up-to-date jets (May 2011), for backwards compatibility:
+theBJetRetriever.OtherJetCollections=["AntiKt6TopoEMJets","AntiKt4TopoJets","AntiKt6TopoJets"]
+
+# for track-vertex association
+theVertexRetriever.TrackCollection = "TrackParticleCandidate"
+
+theApp.EvtMax = 1
