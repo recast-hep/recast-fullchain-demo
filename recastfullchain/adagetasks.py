@@ -51,7 +51,7 @@ def madgraph(steeringtempl, outputLHE, outputdiagramdir, param, proc, nevents = 
   render(steeringtempl,steeringfile, PARAM = param, PROC = proc, NEVENTS = nevents, WORKDIR =  madgraphwork)
   try:
     subprocess.check_call(['mg5','-f',steeringfile])
-    subprocess.check_call(['gunzip','-c','{}/Events/output/events.lhe.gz'.format(madgraphwork)],
+    subprocess.check_call(['gunzip','-c','{}/Events/output/unweighted_events.lhe.gz'.format(madgraphwork)],
                           stdout = open(outputLHE,'w'))
     log.info('..')
   except subprocess.CalledProcessError:
