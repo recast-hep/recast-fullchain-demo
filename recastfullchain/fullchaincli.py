@@ -34,6 +34,7 @@ def build_dag(workdir):
 
   pack = mknode(dag,adagetasks.pack_LHE_File.s(inwrk('what.lhe'),1,outputdir = workdir), depends_on = [madgraph])
 
+
   evgen = mknode(dag,adagetasks.evgen.s(inwrk('what._00001.tar.gz'), inwrk('evt.pool.root'),
                                         seed = 1234, jobopts = rsrc('evgenJO.py'), runnr = 123, ecm = 14000,
                                         workdir = inwrk('evgenwork'), maxevents = 1), depends_on=[pack])
@@ -64,11 +65,13 @@ def fullchaincli(workdir,logger):
   global log
   log = logging.getLogger(logger)
 
+  adagetasks.log = log
+
   log.info('running fullchain from workdir {0}'.format(workdir))
 
   dag,rules = build_dag(workdir)
   
-  adage.rundag(dag,rules,loggername = logger)
+  adage.rundag(dag,rules,loggername = logger, track = True, workdir = workdir, trackevery = 60)
 
   log.info('done')
   
